@@ -2,71 +2,53 @@
 
 **SparseGuard** is an Edge AI accelerator designed for the **PERURI Chip Hackathon 2026**. It features a hybrid architecture combining a high-throughput Neural Network Vector Processing Unit (VPU) with a hardware-based cryptographic security layer (Integrity Boot) to prevent the execution of manipulated or malicious neural network models.
 
-## 🚀 Key Features
+## 🚀 ASIP & Security Design
 
-*   **Integrity Boot (Hardware Security):** Implements an on-the-fly SHA-256 hash verification module. As the model weights and instructions are streamed via SPI, the hardware calculates the cryptographic digest and cross-checks it with a trusted reference.
-*   **High-Throughput VPU:** Features a 4-lane 8-bit Integer (INT8) Multiply-Accumulate (MAC) Array utilizing FPGA DSP blocks for parallel computation.
-*   **Edge-Optimized Footprint:** Extremely lightweight resource utilization. Designed to fit comfortably alongside other SoC components on a Cyclone V FPGA (DE10-Nano).
-*   **Low Latency:** Cryptographic hashing runs in parallel with memory loading, effectively hiding the boot latency.
+### Application-Specific Instruction-set Processor (ASIP)
+The design adopts an ASIP methodology with a custom 32-bit Instruction Set Architecture (ISA). The baseline implementation is targeted purely for FPGA devices, utilizing M10K BRAM abstractions without ASIC technology node limitations.
 
-## 📁 Repository Structure
+### Secure Boot & Hardware Hash
+Security validation in SparseGuard targets the mitigation of Man-in-the-Middle (MitM) vulnerabilities and architecture injection during SPI payload handovers (Firmware Over-The-Air). 
+The protocol operates in two strict phases:
+1. **STREAM Phase:** The hardware bootloader receives 1024 bytes of bytecode and forwards it to the hardware hash computation unit (`sha256_core`) on-the-fly.
+2. **VERIFY Phase:** The Digest value is bitwise compared with a hardcoded ROM constant. Instruction Fetching by the VPU Decoder is electrically locked and rejected if verification fails (`integrity_fail` active). 
+*(Note: Every payload is time-locked via a `CHECK_NONCE` instruction to reject Replay Attacks).*
 
-*   `rtl/` - SystemVerilog source codes for the SparseGuard hardware.
-    *   `sparseguard_top.sv` - Top-level wrapper (SPI to Core).
-    *   `sparseguard.sv` - Main FSM and VPU integration.
-    *   `mac_array.sv` - 4-lane DSP-based MAC datapath.
-    *   `integrity_boot.sv` & `sha256_core.sv` - Cryptographic verification.
-*   `tb/` - Python/Cocotb testbenches for automated RTL verification.
-*   `model/` - Python scripts for the Neural Network golden model, training, quantization (INT8), and pruning.
-*   `data/` - Datasets and raw features used for training and evaluation.
-*   `docs/` - System block diagrams and related documentation.
+## 📁 RTL Module Details
+
+| Module | Function | Notes |
+| :--- | :--- | :--- |
+| `sparseguard_top.sv` | Top-Level IO Wrapper | Maps physical I/O (SPI, LEDs) for the DE10-Nano board. |
+| `sparseguard.sv` | Core Orchestrator FSM | Manages BOOT, VERIFY, INFER, WAIT_FEAT states. Assembles 8-bit SPI streams into 32-bit Words for BRAM. |
+| `spi_slave.sv` | Serial Host Interface | Receives serial data from host via SPI clock (`sclk`). |
+| `sha256_core.sv` | Hardware Hash Cryptography | Computes SHA-256 digest from uploaded bytecode on-the-fly. |
+| `reference_digest.sv` | Key Storage ROM | Hardcoded 256-bit trusted reference hash (immune to runtime manipulation). |
+| `integrity_boot.sv` | Security Comparator | Synchronizes and compares `sha256_core` output with `reference_digest`. Asserts `integrity_fail` on mismatch. |
+| `vpu_ram.sv` | Main Memory (1 KB) | Inferred as 1 M10K BRAM block (256 depth x 32-bit). Stores VPU bytecode. |
+| `vpu_decoder.sv` | Vector Processing Unit | Main ASIP Core (Fetch-Decode-Execute). Translates custom 32-bit ISA like `MAC_EXEC` and `MAC_SKIP`. |
+| `mac_array.sv` | 4-Lane Multiply-Accumulate | Parallel datapath performing four INT8 dot-products and accumulations per clock cycle. |
+| `relu_quant.sv` | Activation & Quantization | Applies ReLU and scales the 32-bit accumulator back to INT8 resolution. |
+| `output_cmp.sv` | Anomaly Detector | Final comparator matching inference scores against a threshold to trigger alarms. |
 
 ## 🛠️ Simulation & Verification
 
-The project uses **Cocotb** (Coroutine based cosimulation library for writing VHDL and Verilog testbenches in Python) to verify the RTL against the Python Golden Model.
-
-### Prerequisites
-*   Python 3.12+
-*   `cocotb` and `pytest`
-*   Verilator or Questa/ModelSim
-
-### Running the Tests
-To run the automated tests and verify the functional accuracy and security features:
+The project uses **Cocotb** to verify the RTL against the Python Golden Model using the CWRU dataset.
 ```bash
 cd tb
 pytest test_top.py
 ```
-*(Ensure your virtual environment `.venv` is activated)*
+*   **Functional Verification:** Achieved bit-exact behavior on 64 INT8 feature vectors, verifying saturation, hardware sparsity, and pipeline management.
+*   **Security Injection Test:** Modifying a single random bit in the 1024-byte payload instantly locks the system and triggers `integrity_fail`.
 
-## 📊 Synthesis Results (Intel Quartus Prime)
+## 📊 Synthesis Results (Intel Quartus Prime 25.1)
+Target Device: **Cyclone V (5CSEBA6U23I7) / DE10-Nano**
 
-The project has been successfully synthesized and verified for the **Cyclone V (DE10-Nano)** FPGA. The Quartus project files and reports are available in the `quartus/` directory.
-
-### 1. Resource Utilization (Map Summary)
-The design is extremely lightweight, occupying less than 1% of the total FPGA resources, leaving ample room for other Edge SoC components.
-```text
-Analysis & Synthesis Status : Successful
-Family : Cyclone V
-Top-level Entity Name : sparseguard_top
-Logic utilization (in ALMs) : N/A
-Total registers : 2769
-Total block memory bits : 8,192
-Total DSP Blocks : 7
-```
-*(From `sparseguard.map.summary`)*
-
-### 2. Timing Analysis (STA Summary)
-The 4-lane MAC Array datapath meets all timing constraints effortlessly, ensuring stable parallel execution at a positive slack.
-```text
-Type  : Slow 1100mV 100C Model Setup 'clk'
-Slack : 0.977
-TNS   : 0.000
-
-Type  : Fast 1100mV 100C Model Setup 'clk'
-Slack : 10.641
-TNS   : 0.000
-```
-*(From `sparseguard.sta.summary`)*
+The design exhibits extreme silicon efficiency, consuming very minimal resources:
+*   **Logic Utilization (ALMs):** 2,027 / 41,910 ALMs (5%)
+*   **Registers:** 2,901 / 415,000
+*   **Block RAM (M10K):** 1 Block (8,192 bits) / 5,570 Kbits
+*   **DSP Blocks:** 7 / 112 DSP
+*   **Timing / Power:** Achieves an Fmax of **52.57 MHz**, comfortably passing the 50 MHz constraint. Combined with a 5% area footprint, dynamic power consumption is significantly reduced, making it ideal for IoT Edge Nodes.
 
 ---
-*Developed for the PERURI Chip Hackathon 2026 - Category: AI Edge Accelerator.*
+*Developed by Aulia Radzaky Aria & Raihan Ata Putra for the PERURI Chip Hackathon 2026.*
