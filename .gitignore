@@ -1,0 +1,30 @@
+# Python / Python Environments
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Simulation / Build Artifacts
+sim_build/
+sim/
+artifacts/
+tb/sim_build/
+
+# Large binaries / Backups
+*.tar.gz
+*.bin
+*.sof
+*.rbf
+
+# Quartus
+db/
+incremental_db/
+output_files/
+*.qmsg
+*.rpt
+*.summary
+*.done
+*.smsg
+*.jdi
+*.pin
+*.sld
