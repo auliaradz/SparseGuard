@@ -39,11 +39,34 @@ pytest test_top.py
 *(Ensure your virtual environment `.venv` is activated)*
 
 ## 📊 Synthesis Results (Intel Quartus Prime)
-Target Device: **Cyclone V (DE10-Nano)**
-*   **Logic Utilization:** ~2,769 Registers
-*   **Block RAM:** 8,192 bits (~8 Kbits / M10K blocks)
-*   **DSP Blocks:** 7
-*   **Timing:** Meets all timing constraints with positive setup slack (>50MHz Fmax).
+
+The project has been successfully synthesized and verified for the **Cyclone V (DE10-Nano)** FPGA. The Quartus project files and reports are available in the `quartus/` directory.
+
+### 1. Resource Utilization (Map Summary)
+The design is extremely lightweight, occupying less than 1% of the total FPGA resources, leaving ample room for other Edge SoC components.
+```text
+Analysis & Synthesis Status : Successful
+Family : Cyclone V
+Top-level Entity Name : sparseguard_top
+Logic utilization (in ALMs) : N/A
+Total registers : 2769
+Total block memory bits : 8,192
+Total DSP Blocks : 7
+```
+*(From `sparseguard.map.summary`)*
+
+### 2. Timing Analysis (STA Summary)
+The 4-lane MAC Array datapath meets all timing constraints effortlessly, ensuring stable parallel execution at a positive slack.
+```text
+Type  : Slow 1100mV 100C Model Setup 'clk'
+Slack : 0.977
+TNS   : 0.000
+
+Type  : Fast 1100mV 100C Model Setup 'clk'
+Slack : 10.641
+TNS   : 0.000
+```
+*(From `sparseguard.sta.summary`)*
 
 ---
 *Developed for the PERURI Chip Hackathon 2026 - Category: AI Edge Accelerator.*
