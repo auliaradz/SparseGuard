@@ -7,7 +7,10 @@ module sparseguard (
     // Byte-stream interface from Host (SPI)
     input  logic       stream_valid,
     input  logic [7:0] stream_data,
-    
+    input  logic       cs_n_fall,
+    input  logic [7:0] status_data,
+    output logic [7:0] tx_data,
+
     // Status outputs
     output logic       busy,
     output logic       done,
@@ -18,7 +21,9 @@ module sparseguard (
 
     // FSM States
     typedef enum logic [2:0] {
+        ST_NONCE,
         ST_BOOT,
+        ST_TAG,
         ST_VERIFY,
         ST_WAIT_FEAT,
         ST_INFER,
@@ -30,27 +35,31 @@ module sparseguard (
     logic [9:0] rx_cnt, next_rx_cnt;
     logic [3:0] feat_cnt, next_feat_cnt;
     logic [31:0] word_buf;
-    
+    logic [63:0] free_cnt;
+    logic [63:0] nonce_reg;
+    logic [255:0] tag_reg;
+
     // Memory write signals
     logic        ram_we;
     logic [7:0]  ram_waddr;
     logic [31:0] ram_wdata;
-    
+
     // Feature load signals
     logic        feat_load_en;
     logic [3:0]  feat_load_idx;
-    
+
     // Crypto signals
     logic        hash_valid, hash_last, hash_ready, digest_valid;
-    logic [255:0] digest, ref_digest;
+    logic [255:0] digest;
     logic        weights_valid, integ_fail_internal;
-    
+    logic        nonce_ready;
+
     // Decoder signals
     logic        start_infer, dec_done, dec_alarm, dec_error;
     logic [7:0]  dec_pc;
     logic        dec_re;
     logic [31:0] dec_instr_data;
-    logic        mac_en, mac_clear_acc, mac_load_bias;
+    logic        mac_en, mac_load_bias;
     logic [31:0] mac_weights, mac_bias_val;
     logic [3:0]  feat_idx, hidden_idx;
     logic        hidden_we, is_layer2;
@@ -65,6 +74,8 @@ module sparseguard (
     assign acc2_debug = acc_out_reg;
     always_ff @(posedge clk) acc_out_reg <= acc_out;
 
+    always_ff @(posedge clk) free_cnt <= free_cnt + 64'd1;
+
     // 1. Memory (VPU RAM)
     vpu_ram ram (
         .clk(clk), .rst_n(rst_n),
@@ -77,7 +88,7 @@ module sparseguard (
         .clk(clk), .rst_n(rst_n),
         .start_infer(start_infer), .done(dec_done), .alarm(dec_alarm), .error_flag(dec_error),
         .pc(dec_pc), .re(dec_re), .instr_data(dec_instr_data),
-        .mac_en(mac_en), .mac_weights(mac_weights), .mac_clear_acc(mac_clear_acc),
+        .mac_en(mac_en), .mac_weights(mac_weights),
         .mac_load_bias(mac_load_bias), .mac_bias_val(mac_bias_val),
         .feat_idx(feat_idx), .hidden_we(hidden_we), .hidden_idx(hidden_idx), .is_layer2(is_layer2),
         .quant_m(param_M), .quant_shift(param_shift), .threshold(param_thr)
@@ -87,14 +98,14 @@ module sparseguard (
     sha256_core hash_core (
         .clk(clk), .rst_n(rst_n),
         .stream_valid(hash_valid), .stream_data(stream_data), .stream_last(hash_last),
-        .hash_ready(hash_ready), .digest(digest), .digest_valid(digest_valid)
+        .hash_ready(hash_ready), .digest(digest), .digest_valid(digest_valid), .nonce(nonce_reg),
+        .nonce_ready(nonce_ready)
     );
-
-    reference_digest refd (.ref_digest(ref_digest));
 
     integrity_boot boot_chk (
         .clk(clk), .rst_n(rst_n),
-        .digest(digest), .digest_valid(digest_valid), .ref_digest(ref_digest),
+        .digest(digest), .digest_valid(digest_valid), .ref_digest(tag_reg),
+        .tag_valid(state == ST_VERIFY),
         .weights_valid(weights_valid), .integrity_fail(integ_fail_internal)
     );
 
@@ -111,6 +122,11 @@ module sparseguard (
         .hidden_features(hidden_features)
     );
 
+    always_ff @(posedge clk) begin
+        if (hidden_we) begin
+        end
+    end
+
     // 5. MAC Datapath Muxing
     logic        mac_v0, mac_v1, mac_v2, mac_v3;
     logic signed [7:0] mac_f0, mac_f1, mac_f2, mac_f3;
@@ -122,21 +138,21 @@ module sparseguard (
         mac_w1 = mac_weights[15:8];
         mac_w2 = mac_weights[23:16];
         mac_w3 = mac_weights[31:24];
-        
+
         mac_v0 = mac_en; mac_v1 = mac_en; mac_v2 = mac_en; mac_v3 = mac_en;
-        
+
         if (!is_layer2) begin
             // Layer 1 uses features
-            mac_f0 = features[{feat_idx, 2'd0}];
-            mac_f1 = features[{feat_idx, 2'd1}];
-            mac_f2 = features[{feat_idx, 2'd2}];
-            mac_f3 = features[{feat_idx, 2'd3}];
+            mac_f0 = features[{feat_idx[1:0], 2'd0}];
+            mac_f1 = features[{feat_idx[1:0], 2'd1}];
+            mac_f2 = features[{feat_idx[1:0], 2'd2}];
+            mac_f3 = features[{feat_idx[1:0], 2'd3}];
         end else begin
             // Layer 2 uses hidden_features (feat_idx works the same way!)
-            mac_f0 = hidden_features[{feat_idx, 2'd0}];
-            mac_f1 = hidden_features[{feat_idx, 2'd1}];
-            mac_f2 = hidden_features[{feat_idx, 2'd2}];
-            mac_f3 = hidden_features[{feat_idx, 2'd3}];
+            mac_f0 = hidden_features[{feat_idx[1:0], 2'd0}];
+            mac_f1 = hidden_features[{feat_idx[1:0], 2'd1}];
+            mac_f2 = hidden_features[{feat_idx[1:0], 2'd2}];
+            mac_f3 = hidden_features[{feat_idx[1:0], 2'd3}];
         end
     end
 
@@ -163,16 +179,23 @@ module sparseguard (
     // 6. Top FSM (Bootloader)
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            state <= ST_BOOT;
+            state <= ST_NONCE;
             rx_cnt <= 10'd0;
             feat_cnt <= 4'd0;
             word_buf <= 32'd0;
             integrity_fail <= 1'b0;
+            nonce_reg <= 64'd0;
+            nonce_ready <= 1'b0;
         end else begin
             state <= next_state;
+
+            if (state == ST_NONCE && cs_n_fall && !nonce_ready) begin
+                nonce_reg <= free_cnt;
+                nonce_ready <= 1'b1;
+            end
             rx_cnt <= next_rx_cnt;
             feat_cnt <= next_feat_cnt;
-            
+
             // Shift register for assembling 32-bit words from 8-bit stream (Little Endian)
             if (state == ST_BOOT && stream_valid) begin
                 if (rx_cnt[1:0] == 2'd0) word_buf[7:0]   <= stream_data;
@@ -180,7 +203,11 @@ module sparseguard (
                 if (rx_cnt[1:0] == 2'd2) word_buf[23:16] <= stream_data;
                 if (rx_cnt[1:0] == 2'd3) word_buf[31:24] <= stream_data;
             end
-            
+
+            if (state == ST_TAG && stream_valid) begin
+                tag_reg <= {tag_reg[247:0], stream_data};
+            end
+
             if (state == ST_VERIFY && integ_fail_internal) begin
                 integrity_fail <= 1'b1;
             end
@@ -191,30 +218,55 @@ module sparseguard (
     end
 
     always_comb begin
+        tx_data = status_data; // Default
+        if (state == ST_NONCE) begin
+            case (rx_cnt[3:0])
+                4'd1: tx_data = nonce_reg[63:56]; // Sent during byte 2
+                4'd2: tx_data = nonce_reg[55:48]; // Sent during byte 3
+                4'd3: tx_data = nonce_reg[47:40];
+                4'd4: tx_data = nonce_reg[39:32];
+                4'd5: tx_data = nonce_reg[31:24];
+                4'd6: tx_data = nonce_reg[23:16];
+                4'd7: tx_data = nonce_reg[15:8];
+                4'd8: tx_data = nonce_reg[7:0];   // Sent during byte 9
+                default: tx_data = status_data;
+            endcase
+        end
+
         next_state = state;
         next_rx_cnt = rx_cnt;
         next_feat_cnt = feat_cnt;
-        
+
         ram_we = 1'b0;
         ram_waddr = 8'd0;
         ram_wdata = 32'd0;
-        
+
         hash_valid = 1'b0;
         hash_last = 1'b0;
-        
+
         feat_load_en = 1'b0;
         feat_load_idx = feat_cnt;
-        
+
         start_infer = 1'b0;
         busy = (state != ST_WAIT_FEAT);
         done = 1'b0;
 
         case (state)
+            ST_NONCE: begin
+                if (stream_valid) begin
+                    next_rx_cnt = rx_cnt + 10'd1;
+                    if (rx_cnt == 10'd9) begin
+                        next_state = ST_BOOT;
+                        next_rx_cnt = 10'd0;
+                    end
+                end
+            end
+
             ST_BOOT: begin
                 if (stream_valid) begin
                     hash_valid = 1'b1;
                     next_rx_cnt = rx_cnt + 10'd1;
-                    
+
                     // Trigger RAM write every 4th byte
                     if (rx_cnt[1:0] == 2'd3) begin
                         ram_we = 1'b1;
@@ -222,19 +274,30 @@ module sparseguard (
                         // Assemble the final word combination combinationally for immediate write
                         ram_wdata = {stream_data, word_buf[23:0]};
                     end
-                    
+
                     if (rx_cnt == 10'd1023) begin
                         hash_last = 1'b1;
-                        next_state = ST_VERIFY;
+                        next_state = ST_TAG;
+                        next_rx_cnt = 10'd0;
                     end
                 end
             end
-            
+
+            ST_TAG: begin
+                if (stream_valid) begin
+                    next_rx_cnt = rx_cnt + 10'd1;
+                    if (rx_cnt == 10'd31) begin
+                        next_state = ST_VERIFY;
+                        next_rx_cnt = 10'd0;
+                    end
+                end
+            end
+
             ST_VERIFY: begin
                 if (weights_valid) next_state = ST_WAIT_FEAT;
                 else if (integ_fail_internal) next_state = ST_ERROR;
             end
-            
+
             ST_WAIT_FEAT: begin
                 if (stream_valid) begin
                     feat_load_en = 1'b1;
@@ -245,7 +308,7 @@ module sparseguard (
                     end
                 end
             end
-            
+
             ST_INFER: begin
                 if (dec_done) begin
                     done = 1'b1;
@@ -255,9 +318,13 @@ module sparseguard (
                     next_state = ST_ERROR;
                 end
             end
-            
+
             ST_ERROR: begin
                 // Halt.
+            end
+
+            default: begin
+                next_state = ST_ERROR;
             end
         endcase
     end

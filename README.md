@@ -32,13 +32,23 @@ The protocol operates in two strict phases:
 
 ## 🛠️ Simulation & Verification
 
-The project uses **Cocotb** to verify the RTL against the Python Golden Model using the CWRU dataset.
+The project uses **Cocotb** and **Verilator** to verify the RTL against the Python Golden Model using the CWRU dataset.
 ```bash
 cd tb
-pytest test_top.py
+make -C tb
 ```
-*   **Functional Verification:** Achieved bit-exact behavior on 64 INT8 feature vectors, verifying saturation, hardware sparsity, and pipeline management.
-*   **Security Injection Test:** Modifying a single random bit in the 1024-byte payload instantly locks the system and triggers `integrity_fail`.
+### Pengujian Keamanan & Fungsi:
+- **Test ACC2 Bit-Exact**: Membuktikan RTL accumulator layer 2 menghasilkan nilai yang **100% sama presisi (bit-exact)** secara matematis dengan golden model integer.
+- **Test Tamper Single-Bit**: Mengubah satu bit secara acak (byte ke- 0, 1, 2, 3, 4, 200, 1023) pada *blob* atau *tag* berhasil dideteksi dan sistem masuk ke state ERROR.
+- **Test Replay Attack**: Membuktikan pertukaran nonce berhasil mencegah re-injeksi transaksi lama yang valid dari simulasi sebelumnya. Nonce dibangkitkan secara pseudo-acak dari *free-running counter* (waktu boot host).
+- **Test Wrong Key**: Host dengan *secret key* yang salah gagal membangkitkan *tag* yang sesuai sehingga verifikasi ditolak.
+- **Uji Keterbatasan Kecepatan SPI**: Karena tidak ada buffer untuk *sha256_core*, SCLK tidak boleh lebih cepat dari 6.15 MHz untuk master clock 50 MHz agar byte tidak hilang (*buffer overrun*).
+
+**Keterbatasan Verifikasi yang Belum Teruji:**
+- **Analisis Daya**: Evaluasi konsumsi daya dinamis FPGA belum disimulasikan.
+- **Serangan Fisik**: Tidak ada perlindungan *side-channel* (DPA/CPA) pada modul kriptografi atau mitigasi serangan injeksi *glitch* tegangan/clock.
+- **TRNG Hardware**: Nonce bergantung penuh pada variasi waktu eksekusi host (jitter host) terhadap *clock* FPGA karena bersumber dari *counter*, bukan True Random Number Generator. Jika host 100% deterministik, nilai nonce dapat ditebak.
+- **Pengujian Board Fisik**: Desain baru diuji pada tingkat *cycle-accurate RTL Simulation*, belum diunggah dan dijalankan langsung di atas *board DE10-Nano*.
 
 ## 📊 Synthesis Results (Intel Quartus Prime 25.1)
 Target Device: **Cyclone V (5CSEBA6U23I7) / DE10-Nano**

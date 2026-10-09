@@ -9,6 +9,7 @@ module spi_slave (
     output logic       spi_miso,
 
     // Byte Stream Interface
+    output logic       cs_n_fall_out,
     output logic       rx_valid,
     output logic [7:0] rx_data,
     input  logic [7:0] tx_data
@@ -36,6 +37,7 @@ module spi_slave (
     assign sclk_fall   =  sclk_sync[2] & ~sclk_sync[1];
     assign cs_n_active = ~cs_n_sync[1];
     assign cs_n_fall   =  cs_n_sync[2] & ~cs_n_sync[1];
+    assign cs_n_fall_out = cs_n_fall;
 
     logic [2:0] bit_cnt;
     logic [7:0] rx_shift;

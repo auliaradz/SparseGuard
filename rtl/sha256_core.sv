@@ -10,19 +10,21 @@ module sha256_core (
     // Output
     output logic [255:0] digest,
     output logic         digest_valid,
-    output logic         hash_ready
+    output logic         hash_ready,
+    input  logic [63:0]  nonce,
+    input  logic         nonce_ready
 );
     // Hash Values (H0..H7)
     logic [31:0] H [0:7];
 
     // Registers A..H for the compression round
     logic [31:0] A_reg, B_reg, C_reg, D_reg, E_reg, F_reg, G_reg, H_reg;
-    
+
     // Message Block Buffer (64 bytes)
     logic [7:0] block_buf [0:63];
     logic [5:0] byte_cnt; // 0 to 63
     logic [4:0] sec_idx;
-    localparam [127:0] SECRET = "SPARSEGUARD_SEC!";
+    `include "secret_key.svh"
     logic [63:0] total_bits;
 
     // FSM States
@@ -62,20 +64,26 @@ module sha256_core (
             length_written <= 1'b0;
             pad_len_shift <= 64'd0;
             round_cnt <= 7'd0;
-            
+
             // SHA-256 Initial Hash Values
             H[0] <= 32'h6a09e667; H[1] <= 32'hbb67ae85; H[2] <= 32'h3c6ef372; H[3] <= 32'ha54ff53a;
             H[4] <= 32'h510e527f; H[5] <= 32'h9b05688c; H[6] <= 32'h1f83d9ab; H[7] <= 32'h5be0cd19;
-            
+
             for (int i=0; i<64; i++) block_buf[i] <= 8'd0;
         end else begin
             case (state)
                 ST_INJECT_SEC: begin
-                    block_buf[byte_cnt] <= SECRET[ (15 - sec_idx)*8 +: 8 ];
-                    byte_cnt <= byte_cnt + 6'd1;
-                    total_bits <= total_bits + 64'd8;
-                    sec_idx <= sec_idx + 5'd1;
-                    if (sec_idx == 5'd15) state <= ST_IDLE;
+                    if (nonce_ready) begin
+                        if (sec_idx < 5'd16) begin
+                            block_buf[byte_cnt] <= SECRET_KEY[ (15 - sec_idx[3:0])*8 +: 8 ];
+                        end else begin
+                            block_buf[byte_cnt] <= nonce[ (7 - sec_idx[2:0])*8 +: 8 ];
+                        end
+                        byte_cnt <= byte_cnt + 6'd1;
+                        total_bits <= total_bits + 64'd8;
+                        sec_idx <= sec_idx + 5'd1;
+                        if (sec_idx == 5'd23) state <= ST_IDLE;
+                    end
                 end
                 ST_IDLE: begin
                     if (stream_valid) begin
@@ -95,7 +103,7 @@ module sha256_core (
                         block_buf[byte_cnt] <= stream_data;
                         byte_cnt <= byte_cnt + 6'd1;
                         total_bits <= total_bits + 64'd8;
-                        
+
                         if (stream_last) begin
                             last_block <= 1'b1;
                             state <= ST_PAD;
@@ -117,7 +125,7 @@ module sha256_core (
                         byte_cnt <= byte_cnt + 6'd1;
                         need_len <= 1'b1;
                         pad_len_shift <= total_bits;
-                        
+
                         if (byte_cnt == 6'd63) begin
                             state <= ST_COMPRESS; // Need another block for length
                             round_cnt <= 7'd0;
@@ -143,10 +151,14 @@ module sha256_core (
                                     round_cnt <= 7'd0;
                                     length_written <= 1'b1;
                                 end
+                                default: begin
+                                    state <= ST_DONE;
+                                    digest_valid <= 1'b0;
+                                end
                             endcase
                             byte_cnt <= byte_cnt + 6'd1;
                         end
-                        
+
                         if (byte_cnt == 6'd63 && state != ST_COMPRESS) begin
                             // Padded with zeros up to 63, need another block
                             state <= ST_COMPRESS;
@@ -162,7 +174,7 @@ module sha256_core (
                         A_reg <= H[0]; B_reg <= H[1]; C_reg <= H[2]; D_reg <= H[3];
                         E_reg <= H[4]; F_reg <= H[5]; G_reg <= H[6]; H_reg <= H[7];
                         round_cnt <= round_cnt + 7'd1;
-                        
+
                         // Also initialize W_reg for first 16 words?
                         // No, W_val is combinational and shifts every round_cnt >= 1
                     end else if (round_cnt <= 7'd64) begin
@@ -175,11 +187,11 @@ module sha256_core (
                         F_reg <= E_reg;
                         G_reg <= F_reg;
                         H_reg <= G_reg;
-                        
+
                         // Shift W_reg
                         for (int i=0; i<15; i++) W_reg[i] <= W_reg[i+1];
                         W_reg[15] <= W_val;
-                        
+
                         round_cnt <= round_cnt + 7'd1;
                     end else if (round_cnt == 7'd65) begin
                         // Update Hash Values
@@ -191,7 +203,7 @@ module sha256_core (
                         H[5] <= H[5] + F_reg;
                         H[6] <= H[6] + G_reg;
                         H[7] <= H[7] + H_reg;
-                        
+
                         byte_cnt <= 6'd0;
                         if (length_written) begin
                             state <= ST_DONE;
@@ -205,10 +217,17 @@ module sha256_core (
                     end
                 end
 
+
                 ST_DONE: begin
                     // Stay done
                 end
+
+                default: begin
+                    state <= ST_DONE;
+                    digest_valid <= 1'b0;
+                end
             endcase
+
         end
     end
 
@@ -217,16 +236,16 @@ module sha256_core (
     logic [31:0] buf_word;
     logic [3:0] word_idx;
     assign word_idx = round_cnt[3:0] - 4'd1; // round_cnt is 1 to 64
-    assign buf_word = {block_buf[{word_idx, 2'd0}], block_buf[{word_idx, 2'd1}], 
+    assign buf_word = {block_buf[{word_idx, 2'd0}], block_buf[{word_idx, 2'd1}],
                        block_buf[{word_idx, 2'd2}], block_buf[{word_idx, 2'd3}]};
 
     // W operations
-    assign W_s0 = {W_reg[1][6:0],   W_reg[1][31:7]}  ^ 
-                  {W_reg[1][17:0],  W_reg[1][31:18]} ^ 
+    assign W_s0 = {W_reg[1][6:0],   W_reg[1][31:7]}  ^
+                  {W_reg[1][17:0],  W_reg[1][31:18]} ^
                   (W_reg[1] >> 3);
-                  
-    assign W_s1 = {W_reg[14][16:0], W_reg[14][31:17]} ^ 
-                  {W_reg[14][18:0], W_reg[14][31:19]} ^ 
+
+    assign W_s1 = {W_reg[14][16:0], W_reg[14][31:17]} ^
+                  {W_reg[14][18:0], W_reg[14][31:19]} ^
                   (W_reg[14] >> 10);
 
     always_comb begin
@@ -239,21 +258,21 @@ module sha256_core (
 
     // --- TT07 SHA-256 Round Function Core (xeniarose) ---
     logic [31:0] s1, ch, temp1, s0, maj, temp2;
-    
-    assign s1 = {E_reg[5:0],  E_reg[31:6]}  ^ 
-                {E_reg[10:0], E_reg[31:11]} ^ 
+
+    assign s1 = {E_reg[5:0],  E_reg[31:6]}  ^
+                {E_reg[10:0], E_reg[31:11]} ^
                 {E_reg[24:0], E_reg[31:25]};
-                
+
     assign ch = (E_reg & F_reg) ^ ((~E_reg) & G_reg);
-    
+
     assign temp1 = H_reg + s1 + ch + K_val + W_val;
-    
-    assign s0 = {A_reg[1:0],  A_reg[31:2]}  ^ 
-                {A_reg[12:0], A_reg[31:13]} ^ 
+
+    assign s0 = {A_reg[1:0],  A_reg[31:2]}  ^
+                {A_reg[12:0], A_reg[31:13]} ^
                 {A_reg[21:0], A_reg[31:22]};
-                
+
     assign maj = (A_reg & B_reg) ^ (A_reg & C_reg) ^ (B_reg & C_reg);
-    
+
     assign temp2 = s0 + maj;
 
     // --- K Constants ROM ---
@@ -326,7 +345,7 @@ module sha256_core (
             default: K_val = 32'h0;
         endcase
     end
-    
+
     // --- Final Digest ---
     // H0 to H7 appended
     assign hash_ready = (state == ST_IDLE || state == ST_RECV);

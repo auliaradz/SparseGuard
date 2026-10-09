@@ -28,3 +28,23 @@ output_files/
 *.jdi
 *.pin
 *.sld
+rtl/secret_key.svh
+
+# Local debugging artifacts
+diff_review.diff
+diff_sha.diff
+diff_top.diff
+fix_newlines.py
+fix_quote.py
+fix_sha256.py
+inject_tag.py
+inspect_blob.py
+lint.log
+lint_before.log
+make_full.log
+modify_integrity.py
+modify_sha256.py
+modify_sparseguard.py
+modify_top.py
+test_before.log
+tb/results.xml

@@ -1,7 +1,7 @@
 SIM ?= verilator
 TOPLEVEL_LANG ?= verilog
 
-RTL_DIR = /home/aulia/projects/SparseGuard/rtl
+RTL_DIR = $(abspath ../rtl)
 
 VERILOG_SOURCES += $(RTL_DIR)/vpu_decoder.sv
 VERILOG_SOURCES += $(RTL_DIR)/vpu_ram.sv
@@ -18,9 +18,12 @@ VERILOG_SOURCES += $(RTL_DIR)/spi_slave.sv
 VERILOG_SOURCES += $(RTL_DIR)/sparseguard_top.sv
 
 TOPLEVEL = sparseguard_top
-MODULE = test_top
+MODULE = test_security
 
 # Verilator specific flags
-EXTRA_ARGS += --trace-fst --trace-structs -Wno-fatal
+EXTRA_ARGS += --trace-fst --trace-structs -Wno-fatal -I$(RTL_DIR)
+
+# Prepare secret key include file for simulation
+$(shell cp -n $(RTL_DIR)/secret_key.svh.example $(RTL_DIR)/secret_key.svh)
 
 include $(shell cocotb-config --makefiles)/Makefile.sim

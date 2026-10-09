@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 import sys
 
-ROOT = Path('/home/aulia/projects/SparseGuard')
+ROOT = Path(__file__).resolve().parents[1]
 DATA_PATH = ROOT / 'data/processed/cwru_features_16.npz'
 SCALER_PATH = ROOT / 'artifacts/feature_scaler_calibrated.npz'
 PRUNED_PATH = ROOT / 'artifacts/cwru_mlp_pruned_float.npz'
@@ -89,7 +89,8 @@ def compile_vpu(p, nonce=1):
                     packed |= (val << (k*8))
                 stream.append(packed)
                 mac_cycles += 1
-        stream.append(build_instruction(OP_NEXT_NEURON, 0))
+        if j < N_HID - 1:
+            stream.append(build_instruction(OP_NEXT_NEURON, 0))
     
     stream.append(build_instruction(OP_SWITCH_L2, 0))
     
