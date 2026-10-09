@@ -1,0 +1,108 @@
+{
+  "float_pruned": {
+    "calibration": {
+      "accuracy": 0.9944444444444445,
+      "recall": 0.9930555555555556,
+      "specificity": 1.0,
+      "precision": 1.0,
+      "f1": 0.9965156794425087,
+      "balanced_accuracy": 0.9965277777777778,
+      "roc_auc": 1.0,
+      "tn": 36,
+      "fp": 0,
+      "fn": 1,
+      "tp": 143
+    },
+    "test": {
+      "accuracy": 0.997872340425532,
+      "recall": 0.9971671388101983,
+      "specificity": 1.0,
+      "precision": 1.0,
+      "f1": 0.9985815602836879,
+      "balanced_accuracy": 0.9985835694050991,
+      "roc_auc": 1.0,
+      "tn": 234,
+      "fp": 0,
+      "fn": 2,
+      "tp": 704
+    }
+  },
+  "int8": {
+    "calibration": {
+      "accuracy": 1.0,
+      "recall": 1.0,
+      "specificity": 1.0,
+      "precision": 1.0,
+      "f1": 1.0,
+      "balanced_accuracy": 1.0,
+      "roc_auc": 1.0,
+      "tn": 36,
+      "fp": 0,
+      "fn": 0,
+      "tp": 144
+    },
+    "test": {
+      "accuracy": 0.997872340425532,
+      "recall": 0.9971671388101983,
+      "specificity": 1.0,
+      "precision": 1.0,
+      "f1": 0.9985815602836879,
+      "balanced_accuracy": 0.9985835694050991,
+      "roc_auc": 1.0,
+      "tn": 234,
+      "fp": 0,
+      "fn": 2,
+      "tp": 704
+    }
+  },
+  "int8_vs_float_decision_agreement_test": 1.0,
+  "percentile_sweep_calibration": [
+    {
+      "pct": 100.0,
+      "balanced_accuracy": 0.9965277777777778,
+      "recall": 0.9930555555555556,
+      "fn": 1,
+      "fp": 0
+    },
+    {
+      "pct": 99.9,
+      "balanced_accuracy": 1.0,
+      "recall": 1.0,
+      "fn": 0,
+      "fp": 0
+    },
+    {
+      "pct": 99.5,
+      "balanced_accuracy": 0.9965277777777778,
+      "recall": 0.9930555555555556,
+      "fn": 1,
+      "fp": 0
+    }
+  ],
+  "mac_cycles": {
+    "nnz_w1": 64,
+    "mac_effective": 80,
+    "mac_dense": 272,
+    "nnz_per_neuron": [
+      8,
+      4,
+      4,
+      10,
+      2,
+      0,
+      5,
+      5,
+      0,
+      3,
+      6,
+      7,
+      5,
+      3,
+      1,
+      1
+    ],
+    "cycles_dense": 68,
+    "cycles_ideal_packing": 20,
+    "cycles_per_neuron": 26
+  }
+}

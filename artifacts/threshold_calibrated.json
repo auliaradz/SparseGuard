@@ -1,0 +1,5 @@
+{
+  "threshold": 0.5,
+  "objective": "balanced_accuracy",
+  "calibration_rule": "last 20 percent of each 0-1 HP training file; middle 10 percent excluded as temporal gap"
+}

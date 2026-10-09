@@ -1,0 +1,17 @@
+{
+  "train_windows_original": 881,
+  "train_windows_balanced": 350,
+  "test_windows": 940,
+  "accuracy": 0.625531914893617,
+  "precision": 1.0,
+  "recall": 0.5014164305949008,
+  "f1": 0.6679245283018868,
+  "specificity": 1.0,
+  "roc_auc": 0.9886988208517954,
+  "confusion_matrix": {
+    "tn": 234,
+    "fp": 0,
+    "fn": 352,
+    "tp": 354
+  }
+}
