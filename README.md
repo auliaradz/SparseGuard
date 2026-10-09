@@ -54,8 +54,8 @@ make -C tb
 Target Device: **Cyclone V (5CSEBA6U23I7) / DE10-Nano**
 
 The design exhibits extreme silicon efficiency, consuming very minimal resources:
-*   **Logic Utilization (ALMs):** 2,027 / 41,910 ALMs (5%)
-*   **Registers:** 2,901 / 415,000
+*   **Logic Utilization (ALMs):** 2,198 / 41,910 ALMs (5%)
+*   **Registers:** 3,321 / 415,000
 *   **Block RAM (M10K):** 1 Block (8,192 bits) / 5,570 Kbits
 *   **DSP Blocks:** 7 / 112 DSP
 *   **Timing / Power:** Achieves an Fmax of **52.57 MHz**, comfortably passing the 50 MHz constraint. Combined with a 5% area footprint, dynamic power consumption is significantly reduced, making it ideal for IoT Edge Nodes.
