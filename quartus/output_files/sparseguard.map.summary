@@ -1,10 +1,10 @@
-Analysis & Synthesis Status : Successful - Thu Oct  8 15:54:28 2026
+Analysis & Synthesis Status : Successful - Sat Oct 10 10:50:07 2026
 Quartus Prime Version : 25.1std.0 Build 1129 10/21/2025 SC Lite Edition
 Revision Name : sparseguard
 Top-level Entity Name : sparseguard_top
 Family : Cyclone V
 Logic utilization (in ALMs) : N/A
-Total registers : 2769
+Total registers : 3156
 Total pins : 10
 Total virtual pins : 0
 Total block memory bits : 8,192
