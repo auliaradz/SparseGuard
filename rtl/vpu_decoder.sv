@@ -76,6 +76,12 @@ module vpu_decoder (
     logic [31:0] b2_reg;
     logic [31:0] m_reg, shift_reg, thr_reg;
 
+    // Field instruksi (assign terpisah agar Quartus menerima)
+    logic [7:0]  opcode;
+    logic [23:0] operand;
+    assign opcode  = instr_data[31:24];
+    assign operand = instr_data[23:0];
+
     // Combinational assignments
     assign pc = pc_reg;
     assign feat_idx = f_idx;
@@ -160,9 +166,6 @@ module vpu_decoder (
             end
 
             ST_DECODE: begin
-                logic [7:0]  opcode = instr_data[31:24];
-                logic [23:0] operand = instr_data[23:0];
-
                 next_pc = pc_reg + 8'd1; // Default advance
 
                 case (opcode)

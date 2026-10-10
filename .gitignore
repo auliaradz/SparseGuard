@@ -48,3 +48,4 @@ modify_sparseguard.py
 modify_top.py
 test_before.log
 tb/results.xml
+*:Zone.Identifier
